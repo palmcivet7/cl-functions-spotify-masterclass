@@ -13,5 +13,15 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
  */
 
 contract SimpleStableCoin is ERC20 {
-  // TODO implemenet SimpleStableCoin contract.
+  address private s_owner;
+
+  constructor() ERC20("SimpleSTC", "STC") {
+    s_owner = msg.sender;
+
+    _mint(msg.sender, 1000000000000000000000000); // 1 Million STC minted to the deployer.
+  }
+
+  function owner() public view returns (address) {
+    return s_owner;
+  }
 }

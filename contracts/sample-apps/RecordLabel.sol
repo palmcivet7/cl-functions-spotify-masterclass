@@ -77,6 +77,25 @@ contract RecordLabel is FunctionsClient, ConfirmedOwner {
     uint32 gasLimit
   ) public onlyOwner returns (bytes32) {
     // TODO: implement executeRequest()
+    Functions.Request memory req;
+
+    req.initializeRequest(Functions.Location.Inline, Functions.CodeLanguage.JavaScript, source);
+
+    if (secrets.length > 0) {
+      req.addRemoteSecrets(secrets);
+    }
+
+    if (args.length > 0) req.addArgs(args);
+
+    // Update storage variables.
+
+    bytes32 assignedReqID = sendRequest(req, subscriptionId, gasLimit);
+
+    latestRequestId = assignedReqID;
+
+    latestArtistRequestedId = args[0];
+
+    return assignedReqID;
   }
 
   /**
@@ -88,7 +107,47 @@ contract RecordLabel is FunctionsClient, ConfirmedOwner {
    * Either response or error parameter will be set, but never both
    */
   function fulfillRequest(bytes32 requestId, bytes memory response, bytes memory err) internal override {
-    //TODO implement fulfillRequest()
+    latestResponse = response;
+
+    latestError = err;
+
+    emit OCRResponse(requestId, response, err);
+
+    // Artist contract for payment logic here.
+
+    // Artist gets a fixed rate for every addition 1000 active monthly listeners.
+
+    bool nilErr = (err.length == 0);
+
+    if (nilErr) {
+      string memory artistId = latestArtistRequestedId;
+
+      (int256 latestListenerCount, int256 diffListenerCount) = abi.decode(response, (int256, int256));
+
+      if (diffListenerCount <= 0) {
+        // No payments due.
+
+        return;
+      }
+
+      // Pay the artist at 'artistData[latestArtistRequestedId].walletAddress'.
+
+      uint8 stcDecimals = IStableCoin(s_stc).decimals();
+
+      // Artist gets 1 STC per  10000 additional streams.
+
+      uint256 amountDue = (uint256(diffListenerCount) * 1 * 10 ** stcDecimals) / 10000;
+
+      payArtist(artistId, amountDue);
+
+      // Update Artist Mapping.
+
+      artistData[artistId].lastListenerCount = uint256(latestListenerCount);
+
+      artistData[artistId].lastPaidAmount = amountDue;
+
+      artistData[artistId].totalPaid += amountDue;
+    }
   }
 
   function setArtistData(
